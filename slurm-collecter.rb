@@ -121,7 +121,9 @@ get_queues(conf, queues, full, ['pascal', 'test','compute'])
 get_tasks(conf, full, ['pascal', 'test','compute'])
 #get_tasks(conf, full, ['pascal', 'test'])
 
-STDOUT.write '{"queues": '
+STDOUT.write '{"time": "'
+STDOUT.write Time.now.strftime "%Y-%m-%dT%H:%M:%S"
+STDOUT.write '","queues": '
 STDOUT.write queues.to_json
 STDOUT.write ', "nodes": '
 STDOUT.write full[:nodes].to_json
