@@ -121,12 +121,16 @@ get_queues(conf, queues, full, ['pascal', 'test','compute'])
 get_tasks(conf, full, ['pascal', 'test','compute'])
 #get_tasks(conf, full, ['pascal', 'test'])
 
-STDOUT.write '{"time": "'
-STDOUT.write Time.now.strftime "%Y-%m-%dT%H:%M:%S"
-STDOUT.write '","queues": '
-STDOUT.write queues.to_json
-STDOUT.write ', "nodes": '
-STDOUT.write full[:nodes].to_json
-STDOUT.write ', "tasks": '
-STDOUT.write full[:tasks].to_json
-STDOUT.write '}'
+out = ARGV[0].nil? ?
+  STDOUT :
+  File.open(ARGV[0], "w")
+
+out.write '{"time": "'
+out.write Time.now.strftime "%Y-%m-%dT%H:%M:%S"
+out.write '","queues": '
+out.write queues.to_json
+out.write ', "nodes": '
+out.write full[:nodes].to_json
+out.write ', "tasks": '
+out.write full[:tasks].to_json
+out.write '}'
