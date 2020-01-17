@@ -11,18 +11,17 @@ Bundler.require(:default)
 # require './assets'
 # require './helpers'
 
-require "./server.rb"
 
 configure do
-  enable :sessions
+  #enable :sessions
   set :json_encoder, :to_json
   #enable :reloader  # <- for production also
 
   set :public_folder, File.dirname(__FILE__) + '/static'
 
   set :static_cache_control, [:public, max_age: 60 * 60 * 24 * 365]
-  #set :bind, '0.0.0.0'
-  #set :port, 9998
+#  set :bind, '0.0.0.0'
+#  set :port, 9998
 
   set :partial_template_engine, :slim
 
@@ -49,3 +48,6 @@ options '*' do
   response.headers['Allow'] = 'GET,PUT,POST'
   response.headers['Access-Control-Allow-Headers'] = 'X-Requested-With, X-HTTP-Method-Override, Content-Type, Cache-Control, Accept'
 end
+
+
+require "./server.rb"

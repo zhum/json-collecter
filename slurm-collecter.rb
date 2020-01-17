@@ -1,5 +1,6 @@
 #!/usr/bin/env ruby
 #
+require 'json'
 
 # %R|%a|%C|
 # name|state|alloc/idle/other/total|
@@ -47,14 +48,37 @@ def get_queues conf, queues, full, queues_list=nil
 
 end
 
-def expand list
-  list
+
+def interval prefix, str ,postfix
+#  warn ">>#{prefix}; #{str};"
+  if /(\d+)-(\d+)/.match str
+    w="%0#{$1.size}d"
+    $1.to_i.upto($2.to_i).map {|i| "#{prefix}#{w % i}#{postfix}"}.join ','
+  else
+    "#{prefix}#{str}"
+  end
+end
+
+def unslurm str
+  str = ",#{str},"
+  while /([^\[]*),([^,\[]+)(\[[^\]]+\])([^,]*),(.*)/.match str
+  #  warn "!! (#{$1})(#{$2})(#{$3})(#{$4})(#{$5})"
+    start=$1
+    prefix=$2
+    m=$3
+    postfix=$4
+    fin=$5
+    list=m[1..-2].split ','
+    result=list.map { |str| ",#{interval(prefix,str,postfix)}" }.join ','
+    str="#{start},#{result},#{fin}"
+  #  warn "## #{args}"
+  end
+  str.split(',').reject{|x| x.length<1}
 end
 
 def get_tasks conf, full, queues_list=nil
   extra = queues_list ? "-p #{queues_list.join(',')}" : ''
-  #warn ">>>>> #{conf[:squeue_tasks_cmd]} #{extra} -h -o '\%i|\%S\%e|\%U|\%t|\%v|\%N|\%p|\%r|\%|\%o'"
-  IO.popen("#{conf[:squeue_tasks_cmd]} #{extra} -h -o '\%i|\%S|\%e|\%U|\%t|\%v|\%n|\%p|\%r|\%o'") do |io|
+  IO.popen("#{conf[:squeue_tasks_cmd]} #{extra} -h -o '\%i|\%S|\%e|\%U|\%t|\%v|\%N|\%P|\%r|\%o'") do |io|
     io.each_line do |line|
       (id,starttime,endtime,uid,state,reservation,nodeslist,part,reason,cmd) = line.chomp.split '|'
       #warn id
@@ -65,7 +89,7 @@ def get_tasks conf, full, queues_list=nil
         uid: uid.to_i,
         state: state,
         reservation: reservation,
-        nodes: expand(nodeslist),
+        nodes: unslurm(nodeslist),
         partition: part,
         reason: reason,
         command: cmd
@@ -84,8 +108,7 @@ full = {
     reserved: [],
     cpu_load: {}
   },
-  tasks: [
-  ]
+  tasks: []
 }
 
 conf = {
@@ -94,10 +117,14 @@ conf = {
   sinfo_nodes_cmd: 'sinfo',
 }
 
-get_queues(conf, queues, full, ['pascal', 'test'])
-get_tasks(conf, full, ['pascal', 'test'])
+get_queues(conf, queues, full, ['pascal', 'test','compute'])
+get_tasks(conf, full, ['pascal', 'test','compute'])
+#get_tasks(conf, full, ['pascal', 'test'])
 
-puts "QUEUES:"
-puts queues.inspect
-puts "FULL"
-puts full.inspect
+STDOUT.write '{"queues": '
+STDOUT.write queues.to_json
+STDOUT.write ', "nodes": '
+STDOUT.write full[:nodes].to_json
+STDOUT.write ', "tasks": '
+STDOUT.write full[:tasks].to_json
+STDOUT.write '}'
