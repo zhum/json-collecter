@@ -1,0 +1,4 @@
+#!/bin/sh
+
+bundle exec rackup -D -P /tmp/slurm-collecter.pid -o 0.0.0.0 -p 8007
+

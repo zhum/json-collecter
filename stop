@@ -1,0 +1,12 @@
+#!/bin/sh
+
+FILE=/tmp/slurm-collecter.pid
+
+if [ -f $FILE ]; then
+  pid=`cat $FILE`
+  kill $pid
+  rm $FILE
+else
+  echo "Already dead..."
+fi
+

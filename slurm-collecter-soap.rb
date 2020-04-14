@@ -1,6 +1,15 @@
 #!/usr/bin/env ruby
 #
 require 'json'
+#require 'savon'
+require 'net/http'
+require 'net/https'
+require 'uri'
+
+CLUSTER=ENV['CLUSTER'] || 'lomonosov-X'
+API_KEY=ENV['API_KEY'] || '1234567890'
+SOAP_SRV=ENV['SOAP_SRV'] || 'https://my.soap.server.insert-here/wsdl'
+JSON_SRV=ENV['JSON_SRV'] || 'https://my.soap.server.insert-here/wsdl'
 
 # %R|%a|%C|
 # name|state|alloc/idle/other/total|
@@ -10,6 +19,7 @@ require 'json'
 
 def get_queues conf, queues, full, queues_list=nil
   extra = queues_list ? "-p #{queues_list.join(',')}" : ''
+  queues['all'] ||= { nodes_total: 0, nodes_alloc: 0, nodes_idle: 0, nodes_other: 0, state: 'up'}
   all_q={}
   IO.popen("#{conf[:sinfo_queues_cmd]} #{extra} -h -o '\%R|\%a|\%C|\%n|\%O|\%H|\%E'") do |io|
     io.each_line do |line|
@@ -34,6 +44,10 @@ def get_queues conf, queues, full, queues_list=nil
           nodes_other: other.to_i,
           nodes: []
         }
+        queues['all'][:nodes_total]+=total.to_i
+        queues['all'][:nodes_alloc]+=alloc.to_i
+        queues['all'][:nodes_idle]+=idle.to_i
+        queues['all'][:nodes_other]+=other.to_i
       end
       #if queues[part].nil?
       #  (alloc, idle, other, total) = part_stat.split '/'
@@ -104,6 +118,7 @@ def get_tasks conf, full, queues_list=nil
     io.each_line do |line|
       (id,starttime,endtime,uid,state,reservation,nodeslist,part,reason,cmd) = line.chomp.split '|'
       #warn id
+      
       full[:tasks] << {
         id: id.to_i,
         starttime: starttime,
@@ -116,10 +131,83 @@ def get_tasks conf, full, queues_list=nil
         reason: reason,
         command: cmd
       }
+      full[:tasks_by_queue][part]||={running: 0, queued: 0, other: 0}
+      st = state=='R' ? :running : state=='PD' ? :queued : :other
+      full[:tasks_by_queue][part][st]+=1
+      full[:tasks_by_queue]['all'][st]+=1
     end
   end
 end
 
+#def send_soap server, queues, full
+#  client = Savon.client(wsdl: server, unwrap: true)
+#  warn client.operations
+#  data = []
+#
+#  queues.each do |q,v|
+#    {'total' => :nodes_total, 'free' => :nodes_idle, 'allocated' => :nodes_alloc, 'other' => :nodes_other}.each {|soap_name,name|
+#      data << {
+#        SuperComp: {
+#          SCName: CLUSTER,
+#          Section: q,
+#          ParName: 'nodes',
+#          ParType: soap_name,
+#          Count: v[name]
+#        }
+#      }
+#    }
+#  end
+#  full[:tasks_by_queue].each do |q,v|
+#    [:running,:queued,:other].each{|t|
+#      data << {
+#        SuperComp: {
+#          SCName: CLUSTER,
+#          Section: q,
+#          ParName: 'tasks',
+#          ParType: t,
+#          Count: v[t]
+#        }
+#      }
+#    }
+#  end 
+#  begin
+#    msg = { 'Date' => Time.now.to_i, 'API' => API_KEY, data: data}
+#    warn "MSG: #{msg.inspect}"
+#    #response = client.call(:send_stat_data,  message: { 'Date' => Time.now.to_i, 'API' => API_KEY, data: {"ns0:Supercomp" => data}})
+#    response = client.call(:rcv_request,  message: {'srv_request' => { 'Date' => Time.now.to_i, 'API' => API_KEY, data: data}})
+#  rescue => e
+#    warn "Err: #{e.class} #{e.message} #{e.inspect}"
+#  end
+#end
+
+def send_json server, queues, full
+  uri = URI.parse(server)
+  req = Net::HTTP::Post.new(uri.request_uri, 'Content-Type' => 'application/json')
+
+  data = {nodes: {}, tasks: {}}
+
+  queues.each do |q,v|
+    data[:nodes][q]||={}
+    {'total' => :nodes_total, 'free' => :nodes_idle, 'allocated' => :nodes_alloc, 'other' => :nodes_other}.each {|json_name,name|
+      data[:nodes][q][json_name]=v[name]
+    }
+  end
+  full[:tasks_by_queue].each do |q,v|
+    data[:tasks][q]||={}
+    [:running,:queued,:other].each{|t|
+      data[:tasks][q][t]=v[t]
+    }
+  end 
+  begin
+    req.body = {key: API_KEY, data: {CLUSTER => data}}.to_json
+    #warn "-->\n#{req.body}"
+    http = Net::HTTP.new(uri.hostname, uri.port)
+    http.use_ssl = true
+    response = http.request(req)
+  rescue => e
+    warn "Err: #{e.class} #{e.message} #{e.inspect}"
+  end
+end
 
 queues = {}
 full = {
@@ -130,7 +218,8 @@ full = {
     reserved: [],
     cpu_load: {}
   },
-  tasks: []
+  tasks: [],
+  tasks_by_queue: { 'all' => {running: 0, queued: 0, other: 0}}
 }
 
 conf = {
@@ -142,7 +231,12 @@ conf = {
 get_queues(conf, queues, full, ['pascal', 'test','compute'])
 get_tasks(conf, full, ['pascal', 'test','compute'])
 #get_tasks(conf, full, ['pascal', 'test'])
-
+#
+#warn send_soap(SOAP_SRV,queues,full)
+res = send_json(JSON_SRV,queues,full)
+unless res.code=='200'
+  warn "#{res.code} #{res.body}"
+end
 out = ARGV[0].nil? ?
   STDOUT :
   File.open(ARGV[0], "w")
