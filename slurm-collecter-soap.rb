@@ -1,5 +1,6 @@
 #!/usr/bin/env ruby
 #
+
 require 'json'
 #require 'savon'
 require 'net/http'
@@ -11,20 +12,28 @@ API_KEY=ENV['API_KEY'] || '1234567890'
 SOAP_SRV=ENV['SOAP_SRV'] || 'https://my.soap.server.insert-here/wsdl'
 JSON_SRV=ENV['JSON_SRV'] || 'https://my.soap.server.insert-here/wsdl'
 
+PREFIX = ENV['PREFIX'] || '/opt/slurm/bin'
+conf = {
+  sinfo_queues_cmd: ENV['SINFO'] || "#{PREFIX}/sinfo",
+  squeue_tasks_cmd: ENV['SQUEUE'] || "#{PREFIX}/squeue",
+  sinfo_nodes_cmd:  ENV['SINFO'] || "#{PREFIX}/sinfo",
+  queues: ENV['QUEUES'] ? ENV['QUEUES'].split : ['test']
+}
+
 # %R|%a|%C|
 # name|state|alloc/idle/other/total|
 
 # %N|%E|%H|%O|
 # nodes|reason|timestamp unavailable|cpu load|
 
-def get_queues conf, queues, full, queues_list=nil
-  extra = queues_list ? "-p #{queues_list.join(',')}" : ''
+def get_queues conf, queues, full
+  extra = conf[:queues] ? "-p #{conf[:queues].join(',')}" : ''
   queues['all'] ||= { nodes_total: 0, nodes_alloc: 0, nodes_idle: 0, nodes_other: 0, state: 'up'}
   all_q={}
   IO.popen("#{conf[:sinfo_queues_cmd]} #{extra} -h -o '\%R|\%a|\%C|\%n|\%O|\%H|\%E'") do |io|
     io.each_line do |line|
       (part, state, part_stat, node, cpu_load, timestamp, reason) = line.split('|')
-      next unless queues_list.include? part 
+      next unless conf[:queues].include? part 
       if all_q[part].nil?
         IO.popen("#{conf[:sinfo_queues_cmd]} -p #{part} -h -o '\%F'") do |q|
           q.each_line do |l|
@@ -112,8 +121,8 @@ def unslurm str
   str.split(',').reject{|x| x.length<1}
 end
 
-def get_tasks conf, full, queues_list=nil
-  extra = queues_list ? "-p #{queues_list.join(',')}" : ''
+def get_tasks conf, full
+  extra = conf[:queues] ? "-p #{conf[:queues].join(',')}" : ''
   IO.popen("#{conf[:squeue_tasks_cmd]} #{extra} -h -o '\%i|\%S|\%e|\%U|\%t|\%v|\%N|\%P|\%r|\%o'") do |io|
     io.each_line do |line|
       (id,starttime,endtime,uid,state,reservation,nodeslist,part,reason,cmd) = line.chomp.split '|'
@@ -222,15 +231,16 @@ full = {
   tasks_by_queue: { 'all' => {running: 0, queued: 0, other: 0}}
 }
 
-conf = {
-  sinfo_queues_cmd: '/opt/slurm/15.08.1/bin/sinfo',
-  squeue_tasks_cmd: '/opt/slurm/15.08.1/bin/squeue',
-  sinfo_nodes_cmd: '/opt/slurm/15.08.1/bin/sinfo',
-}
+#conf = {
+#  sinfo_queues_cmd: '/opt/slurm/15.08.1/bin/sinfo',
+#  squeue_tasks_cmd: '/opt/slurm/15.08.1/bin/squeue',
+#  sinfo_nodes_cmd: '/opt/slurm/15.08.1/bin/sinfo',
+#}
 
-get_queues(conf, queues, full, ['pascal', 'test','compute'])
-get_tasks(conf, full, ['pascal', 'test','compute'])
-#get_tasks(conf, full, ['pascal', 'test'])
+#get_queues(conf, queues, full, ['pascal', 'test','compute'])
+#get_tasks(conf, full, ['pascal', 'test','compute'])
+get_queues(conf, queues, full)
+get_tasks(conf, full)
 #
 #warn send_soap(SOAP_SRV,queues,full)
 res = send_json(JSON_SRV,queues,full)
