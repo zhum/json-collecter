@@ -2,10 +2,11 @@
 #
 
 require 'json'
-#require 'savon'
+require 'savon'
 require 'net/http'
 require 'net/https'
 require 'uri'
+require 'ostruct'
 
 CLUSTER=ENV['CLUSTER'] || 'lomonosov-X'
 API_KEY=ENV['API_KEY'] || '1234567890'
@@ -148,46 +149,56 @@ def get_tasks conf, full
   end
 end
 
-#def send_soap server, queues, full
-#  client = Savon.client(wsdl: server, unwrap: true)
-#  warn client.operations
-#  data = []
-#
-#  queues.each do |q,v|
-#    {'total' => :nodes_total, 'free' => :nodes_idle, 'allocated' => :nodes_alloc, 'other' => :nodes_other}.each {|soap_name,name|
-#      data << {
-#        SuperComp: {
-#          SCName: CLUSTER,
-#          Section: q,
-#          ParName: 'nodes',
-#          ParType: soap_name,
-#          Count: v[name]
-#        }
-#      }
-#    }
-#  end
-#  full[:tasks_by_queue].each do |q,v|
-#    [:running,:queued,:other].each{|t|
-#      data << {
-#        SuperComp: {
-#          SCName: CLUSTER,
-#          Section: q,
-#          ParName: 'tasks',
-#          ParType: t,
-#          Count: v[t]
-#        }
-#      }
-#    }
-#  end 
-#  begin
-#    msg = { 'Date' => Time.now.to_i, 'API' => API_KEY, data: data}
-#    warn "MSG: #{msg.inspect}"
-#    #response = client.call(:send_stat_data,  message: { 'Date' => Time.now.to_i, 'API' => API_KEY, data: {"ns0:Supercomp" => data}})
-#    response = client.call(:rcv_request,  message: {'srv_request' => { 'Date' => Time.now.to_i, 'API' => API_KEY, data: data}})
-#  rescue => e
-#    warn "Err: #{e.class} #{e.message} #{e.inspect}"
-#  end
-#end
+def send_soap server, queues, full
+  client = Savon.client(
+    wsdl: server,
+    unwrap: true,
+    #namespace_identifier: 'ns0',
+    convert_request_keys_to: :none,
+    #log: true,
+    #pretty_print_xml: true
+  )
+  #warn "Server: #{server}"
+  #warn "Operations: #{client.operations}"
+  data = []
+
+  queues.each do |q,v|
+    {'total' => :nodes_total, 'free' => :nodes_idle, 'allocated' => :nodes_alloc, 'other' => :nodes_other}.each {|soap_name,name|
+      data << {
+        Supercomp: {
+          sCName: CLUSTER,
+          section: q,
+          parName: 'nodes',
+          parType: soap_name,
+          count: v[name]
+        }
+      }
+    }
+  end
+  full[:tasks_by_queue].each do |q,v|
+    [:running,:queued,:other].each{|t|
+      data << {
+        Supercomp: {
+          sCName: CLUSTER,
+          section: q,
+          parName: 'tasks',
+          parType: t,
+          count: v[t]
+        }
+      }
+    }
+  end 
+  begin
+    msg = { 'Date' => Time.now.to_i, 'API' => API_KEY, data: data}
+    #warn "MSG: #{msg.inspect}"
+    #response = client.call(:send_stat_data,  message: { 'Date' => Time.now.to_i, 'API' => API_KEY, data: {"ns0:Supercomp" => data}})
+    response = client.call(:send_stat_data,  message: { 'Date' => Time.now.to_i, 'API' => API_KEY, data: data})
+    response.http
+  rescue => e
+    #warn "Err: #{e.message}"
+    OpenStruct.new(code: 999, body: e.message)
+  end
+end
 
 def send_json server, queues, full
   uri = URI.parse(server)
@@ -214,7 +225,8 @@ def send_json server, queues, full
     http.use_ssl = true
     response = http.request(req)
   rescue => e
-    warn "Err: #{e.class} #{e.message} #{e.inspect}"
+    #warn "Err: #{e.class} #{e.message} #{e.inspect}"
+    OpenStruct.new(code: 999, body: e.message)
   end
 end
 
@@ -242,9 +254,9 @@ full = {
 get_queues(conf, queues, full)
 get_tasks(conf, full)
 #
-#warn send_soap(SOAP_SRV,queues,full)
-res = send_json(JSON_SRV,queues,full)
-unless res.code=='200'
+res = send_soap(SOAP_SRV,queues,full)
+#res = send_json(JSON_SRV,queues,full)
+unless res.code.to_s == '200'
   warn "#{res.code} #{res.body}"
 end
 out = ARGV[0].nil? ?
