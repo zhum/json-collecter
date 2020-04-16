@@ -18,6 +18,7 @@ conf = {
   sinfo_queues_cmd: ENV['SINFO'] || "#{PREFIX}/sinfo",
   squeue_tasks_cmd: ENV['SQUEUE'] || "#{PREFIX}/squeue",
   sinfo_nodes_cmd:  ENV['SINFO'] || "#{PREFIX}/sinfo",
+  use_p_key:  ENV['USE_P_KEY'],
   queues: ENV['QUEUES'] ? ENV['QUEUES'].split : ['test']
 }
 
@@ -28,7 +29,7 @@ conf = {
 # nodes|reason|timestamp unavailable|cpu load|
 
 def get_queues conf, queues, full
-  extra = conf[:queues] ? "-p #{conf[:queues].join(',')}" : ''
+  extra = conf[:use_p_key] ? (conf[:queues] ? "-p #{conf[:queues].join(',')}" : '') : ''
   queues['all'] ||= { nodes_total: 0, nodes_alloc: 0, nodes_idle: 0, nodes_other: 0, state: 'up'}
   all_q={}
   IO.popen("#{conf[:sinfo_queues_cmd]} #{extra} -h -o '\%R|\%a|\%C|\%n|\%O|\%H|\%E'") do |io|
@@ -123,7 +124,7 @@ def unslurm str
 end
 
 def get_tasks conf, full
-  extra = conf[:queues] ? "-p #{conf[:queues].join(',')}" : ''
+  extra = conf[:use_p_key] ? (conf[:queues] ? "-p #{conf[:queues].join(',')}" : '') : ''
   IO.popen("#{conf[:squeue_tasks_cmd]} #{extra} -h -o '\%i|\%S|\%e|\%U|\%t|\%v|\%N|\%P|\%r|\%o'") do |io|
     io.each_line do |line|
       (id,starttime,endtime,uid,state,reservation,nodeslist,part,reason,cmd) = line.chomp.split '|'
