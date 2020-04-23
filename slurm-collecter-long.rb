@@ -22,18 +22,22 @@ def get_long_slurm
       case qinfo['_id']
       when 'total_jobs'
         data['totalTasks'] = qinfo['count']
-      when 'accounts'
+      when 'total_accounts'
         data['userCount'] = qinfo['count']
-      when 'projects'
+      when 'total_projects'
         data['projectsCount'] = qinfo['count']
-      when 'queue_total_avg'
-        data['avgQueueLength'] = qinfo['waiting']
+#      when 'queue_total_avg'
+#        data['avgQueueLength'] = qinfo['waiting']
+#      when 'wait_time'
+#        data['avgQueueWaitingTime'] = qinfo['avg']
       when 'wait_time'
-        data['avgQueueWaitingTime'] = qinfo['avg']
+        data['avgQueueWaitingTime'] = qinfo['avg_by_queue']['compute']
+      when 'jobs_waiting'
+        data['avgQueueLength'] = qinfo['avg_by_queue']['compute']
       end
     }
   rescue => e
-    warn "Cannot read long term slurm data: #{e.message}"
+    warn "Cannot read long term slurm data: #{e.message} (json=#{json_text})"
     data={}
   end
   data
@@ -56,6 +60,7 @@ def send_long_slurm_soap server, data
   end
 end
 
+#warn get_long_slurm.inspect
 res = send_long_slurm_soap(YEAR_SRV, get_long_slurm)
 if res.code.to_s == '200'
   #warn "OK: #{res.body}"
