@@ -1,7 +1,9 @@
 #!/usr/bin/env ruby
 #
+debug=true
 
 require 'json'
+require 'yaml/store'
 require 'savon'
 require 'net/http'
 require 'net/https'
@@ -21,6 +23,8 @@ conf = {
   use_p_key:  ENV['USE_P_KEY'],
   queues: ENV['QUEUES'] ? ENV['QUEUES'].split : ['test']
 }
+
+$logins = YAML::Store.new 'logins.yaml'
 
 # %R|%a|%C|
 # name|state|alloc/idle/other/total|
@@ -123,6 +127,23 @@ def unslurm str
   str.split(',').reject{|x| x.length<1}
 end
 
+def login2uid uid
+  login = nil
+  $logins.transaction do
+    login = $logins[uid]
+  end
+  return login if login
+  login = begin
+    Etc.getpwuid(uid).name
+  rescue => e
+    "Unknown-#{uid}"
+  end
+  $logins.transaction do
+    $logins[uid]=login
+  end
+  login
+end
+
 def get_tasks conf, full
   extra = conf[:use_p_key] ? (conf[:queues] ? "-p #{conf[:queues].join(',')}" : '') : ''
   IO.popen("#{conf[:squeue_tasks_cmd]} #{extra} -h -o '\%i|\%S|\%e|\%U|\%t|\%v|\%N|\%P|\%r|\%o'") do |io|
@@ -135,6 +156,7 @@ def get_tasks conf, full
         starttime: starttime,
         endtime: endtime,
         uid: uid.to_i,
+        login: login2uid(uid.to_i),
         state: state,
         reservation: reservation,
         nodes: unslurm(nodeslist),
@@ -244,17 +266,13 @@ full = {
   tasks_by_queue: { 'all' => {running: 0, queued: 0, other: 0}}
 }
 
-#conf = {
-#  sinfo_queues_cmd: '/opt/slurm/15.08.1/bin/sinfo',
-#  squeue_tasks_cmd: '/opt/slurm/15.08.1/bin/squeue',
-#  sinfo_nodes_cmd: '/opt/slurm/15.08.1/bin/sinfo',
-#}
-
-#get_queues(conf, queues, full, ['pascal', 'test','compute'])
-#get_tasks(conf, full, ['pascal', 'test','compute'])
 get_queues(conf, queues, full)
 get_tasks(conf, full)
 #
+if debug
+  puts full.to_json
+  exit 0
+end
 res = send_soap(SOAP_SRV,queues,full)
 #res = send_json(JSON_SRV,queues,full)
 unless res.code.to_s == '200'
