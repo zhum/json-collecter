@@ -39,7 +39,9 @@ def get_queues conf, queues, full
   IO.popen("#{conf[:sinfo_queues_cmd]} #{extra} -h -o '\%R|\%a|\%C|\%n|\%O|\%H|\%E'") do |io|
     io.each_line do |line|
       (part, state, part_stat, node, cpu_load, timestamp, reason) = line.split('|')
+      part = (part.split(',').sort)[0]
       next unless conf[:queues].include? part 
+      #warn "part=#{part}"
       if all_q[part].nil?
         IO.popen("#{conf[:sinfo_queues_cmd]} -p #{part} -h -o '\%F'") do |q|
           q.each_line do |l|
@@ -150,6 +152,8 @@ def get_tasks conf, full
     io.each_line do |line|
       (id,starttime,endtime,uid,state,reservation,nodeslist,part,reason,cmd) = line.chomp.split '|'
       #warn id
+      part = (part.split(',').sort)[0]
+      # warn "task_part=#{part}"
       
       full[:tasks] << {
         id: id.to_i,
