@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 #
-debug=true
+debug = ENV['DEBUG'].to_s=='1'
 
 require 'json'
 require 'yaml/store'

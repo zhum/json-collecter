@@ -10,7 +10,7 @@ require 'ostruct'
 
 YEAR_KEY=ENV['YEAR_KEY'] || '1234567890'
 YEAR_SRV=ENV['YEAR_SRV'] || 'https://my.soap.server.insert-here.wsdl'
-GET_SLURM_LONG='ssh -qi /home/serg/.ssh/slurm_json root@jd-vm'
+GET_SLURM_LONG='TERM=vt100 ssh -qTi /home/serg/.ssh/slurm_json -o "BatchMode yes" root@jd-vm'
 
 def get_long_slurm
 
